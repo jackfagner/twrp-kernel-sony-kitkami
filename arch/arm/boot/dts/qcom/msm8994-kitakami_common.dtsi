@@ -1053,6 +1053,13 @@
 			qcom,s3-debounce = <8>;
 			qcom,s3-src = "resin";
 			/delete-node/ qcom,pon_2;
+			qcom,pon_3 {
+				/delete-property/ qcom,support-reset;
+				/delete-property/ qcom,s1-timer;
+				/delete-property/ qcom,s2-timer;
+				/delete-property/ qcom,s2-type;
+				/delete-property/ qcom,use-bark;
+			};
 		};
 	};
 
@@ -1095,7 +1102,6 @@
 	qcom,usb_dm-vadc = <&pmi8994_vadc>;
 	mhl_switch_sel1_gpio = <&pmi8994_gpios 9 0>;
 	mhl_switch_sel2_gpio = <&pmi8994_gpios 10 0>;
-	vbus_rec-supply = <&smbcharger_charger_otg>;
 	dwc3@f9200000 {
 		maximum-speed = "high-speed";
 	};

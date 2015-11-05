@@ -15,6 +15,7 @@
 #include "vidc_hfi_api.h"
 #include "msm_vidc_debug.h"
 #include "msm_vidc_dcvs.h"
+#include <soc/qcom/socinfo.h>
 
 #define IS_VALID_DCVS_SESSION(__cur_mbpf, __min_mbpf) \
 		((__cur_mbpf) >= (__min_mbpf))
@@ -175,9 +176,23 @@ void msm_dcvs_init_load(struct msm_vidc_inst *inst)
 
 	dcvs->load = msm_comm_get_inst_load(inst, LOAD_CALC_NO_QUIRKS);
 
-	if (dcvs->load >= DCVS_NOMINAL_LOAD) {
-		dcvs->load_low = DCVS_NOMINAL_LOAD;
-		dcvs->load_high = core->resources.max_load;
+	if (inst->session_type == MSM_VIDC_DECODER) {
+		if (dcvs->load > DCVS_NOMINAL_LOAD) {
+			dcvs->load_low = DCVS_NOMINAL_LOAD;
+			dcvs->load_high = dcvs->load =
+				core->resources.max_load;
+		} else if (dcvs->load > DCVS_SVS_LOAD &&
+				dcvs->load <= DIM_2K30) {
+			dcvs->load_low = DCVS_SVS_LOAD;
+			dcvs->load_high = DCVS_NOMINAL_LOAD;
+			dcvs->load = DCVS_NOMINAL_LOAD;
+		}
+	} else {
+		if (dcvs->load >= DCVS_NOMINAL_LOAD) {
+			dcvs->load_low = DCVS_NOMINAL_LOAD;
+			dcvs->load_high = dcvs->load =
+				core->resources.max_load;
+		}
 	}
 
 	if (inst->session_type == MSM_VIDC_ENCODER)
@@ -197,7 +212,8 @@ void msm_dcvs_init_load(struct msm_vidc_inst *inst)
 
 	/* calculating the min and max threshold */
 	if (output_buf_req->buffer_count_actual) {
-		dcvs->min_threshold = DCVS_MIN_DISPLAY_BUFF;
+		dcvs->min_threshold = output_buf_req->buffer_count_actual -
+			output_buf_req->buffer_count_min + 1;
 		dcvs->max_threshold = output_buf_req->buffer_count_actual;
 		if (dcvs->max_threshold <= dcvs->min_threshold)
 			dcvs->max_threshold =
@@ -283,13 +299,13 @@ void msm_dcvs_monitor_buffer(struct msm_vidc_inst *inst)
 		prev_buf_count =
 			dcvs->num_ftb[((dcvs->ftb_index - 2 +
 				DCVS_FTB_WINDOW) % DCVS_FTB_WINDOW)];
-		if (prev_buf_count == DCVS_MIN_DISPLAY_BUFF &&
-			buffers_outside_fw == DCVS_MIN_DISPLAY_BUFF) {
+		if (prev_buf_count == dcvs->threshold_disp_buf_low &&
+			buffers_outside_fw <= dcvs->threshold_disp_buf_low) {
 			dcvs->transition_turbo = true;
-		} else if (buffers_outside_fw > DCVS_MIN_DISPLAY_BUFF &&
+		} else if (buffers_outside_fw > dcvs->threshold_disp_buf_low &&
 			(buffers_outside_fw -
 			 (prev_buf_count - buffers_outside_fw))
-			< DCVS_MIN_DISPLAY_BUFF){
+			< dcvs->threshold_disp_buf_low){
 			dcvs->transition_turbo = true;
 		}
 	}
@@ -476,6 +492,7 @@ bool msm_dcvs_enc_check(struct msm_vidc_inst *inst)
 static int msm_dcvs_check_supported(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
+	int dcvs_2k = 0, dcvs_4k = 0;
 	int num_mbs_per_frame = 0;
 	int instance_count = 0;
 	struct msm_vidc_inst *temp = NULL;
@@ -508,9 +525,33 @@ static int msm_dcvs_check_supported(struct msm_vidc_inst *inst)
 				V4L2_PIX_FMT_VP8) ||
 			(inst->fmts[OUTPUT_PORT]->fourcc ==
 				V4L2_PIX_FMT_H264_NO_SC);
-		if (!is_codec_supported ||
-			!IS_VALID_DCVS_SESSION(num_mbs_per_frame,
-					DCVS_MIN_SUPPORTED_MBPERFRAME))
+		/* 2K DCVS is supported for H264 only on 8992
+		 * 4K DCVS is same as earlier.
+		 */
+		if (socinfo_get_msm_cpu() == MSM_CPU_8992) {
+			if ((inst->fmts[OUTPUT_PORT]->fourcc ==
+				V4L2_PIX_FMT_H264) &&
+				(num_mbs_per_frame ==
+				DCVS_2K_MBPERFRAME))
+				dcvs_2k = 0;
+			if (!is_codec_supported &&
+				!IS_VALID_DCVS_SESSION(num_mbs_per_frame,
+				DCVS_MIN_SUPPORTED_MBPERFRAME))
+				dcvs_4k = -ENOTSUPP;
+			if (num_mbs_per_frame < DCVS_2K_MBPERFRAME)
+				dcvs_2k = dcvs_4k = -ENOTSUPP;
+		}
+
+		if (socinfo_get_msm_cpu() == MSM_CPU_8994) {
+			if (!is_codec_supported &&
+				!IS_VALID_DCVS_SESSION(num_mbs_per_frame,
+				DCVS_MIN_SUPPORTED_MBPERFRAME))
+				dcvs_4k = -ENOTSUPP;
+			if (num_mbs_per_frame <= DCVS_2K_MBPERFRAME)
+				dcvs_2k = dcvs_4k = -ENOTSUPP;
+		}
+
+		if (dcvs_2k || dcvs_4k)
 			return -ENOTSUPP;
 
 		if (!output_buf_req) {

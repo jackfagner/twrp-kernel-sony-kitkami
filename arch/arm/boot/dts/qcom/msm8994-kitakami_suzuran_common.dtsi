@@ -722,9 +722,9 @@
 	};
 
 	/delete-node/ qcom,qseecom@6500000;
-	qcom,qseecom@e700000 {
+	qcom,qseecom@e900000 {
 		compatible = "qcom,qseecom";
-		reg = <0xe700000 0x1900000>;
+		reg = <0xe900000 0x1900000>;
 		reg-names = "secapp-region";
 		qcom,disk-encrypt-pipe-pair = <2>;
 		qcom,file-encrypt-pipe-pair = <0>;
@@ -966,7 +966,6 @@
 	somc,thermal-mitigation-usb-9v = <1500 1400 1300 1000 1000 1000 900 900 700 500 400 300 300 0 0>;
 	somc,thermal-mitigation-usb-5v = <1500 1500 1500 1500 1500 1500 1500 1500 1200 900 700 500 300 0 0>;
 	somc,limit-usb-5v-level = <12>;
-	somc,charge-full-design = <2781000>;
 };
 
 &qsecom_mem {
@@ -974,7 +973,7 @@
 };
 
 &removed_regions {
-	reg = <0 0x06300000 0 0x9D00000>;
+	reg = <0 0x06A00000 0 0x9800000>;
 };
 
 &pcie1 {
